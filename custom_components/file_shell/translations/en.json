@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "File Editor",
+        "description": "Leave Base directory blank to use the Home Assistant configuration directory. Enter / to allow access to the full filesystem visible to Home Assistant.",
+        "data": {
+          "base_dir": "Base directory"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "File Editor Settings",
+        "description": "Leave Base directory blank to use the Home Assistant configuration directory. Enter / to allow access to the full filesystem visible to Home Assistant.",
+        "data": {
+          "base_dir": "Base directory"
+        }
+      }
+    }
+  }
+}

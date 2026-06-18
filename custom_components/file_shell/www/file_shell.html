@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>File Shell</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+document.head.appendChild(Object.assign(document.createElement("link"),{rel:"stylesheet",href:"./file_shell.css"+location.search}))
+</script>
+</head>
+<body class="files">
+
+<div id="layout">
+	<div class="layout">
+		<aside id="sidebar">
+			<nav class="toolbar"></nav>
+			<div id="tree"></div>
+		</aside>
+		<main id="main">
+			<div id="tabs" class="tabs"></div>
+			<nav class="toolbar"></nav>
+			<div id="favs"></div>
+			<div id="files"></div>
+			<div id="uploads"></div>
+			<div id="cmd"><div id="term"></div><div id="hint">Copy: Ctrl + insert, Paste: Shift + insert</div></div>
+			<div id="edit"></div>      
+		</main>
+	</div>
+</div>
+<div id="cmenu"></div>
+<div id="popup"></div>
+<div id="toast"></div>
+<script>
+(()=>{let l=s=>document.body.appendChild(Object.assign(document.createElement("script"),{src:s+location.search}));l("./codemirror.min.js").onload=_=>l("./file_shell.js")})();
+</script>
+</body>
+</html>
