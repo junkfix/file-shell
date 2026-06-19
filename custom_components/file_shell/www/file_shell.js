@@ -1,7 +1,7 @@
 (function () {
 "use strict";
 
-console.log("File Shell 1.0.3");
+console.log("File Shell 1.0.4");
 const _id = (id) => document.getElementById(id);
 const _qsa = (q, el) => Array.from((el || document).querySelectorAll(q));
 const _qs = (q, el) => (el || document).querySelector(q);
@@ -55,17 +55,7 @@ const localGet = (e) => localStorage.getItem(localTag+e);
 const localSet = (k, v) => v == null ? localStorage.removeItem(localTag + k) : localStorage.setItem(localTag + k, v);
 
 
-const opt = {
-	multi: 0,
-	sel: {},
-	dark: false,
-	wrap: localGet("wrap"),
-	bulb: localGet("bulb"),
-	space: localGet("space"),
-	font: Number(localGet('font')) || 100,
-	find: 0,
-	favs: {},
-};
+let opt = {};
 const app = {
 	auth: null,
 	entities: [],
@@ -83,6 +73,11 @@ const app = {
 	uploads: 0,
 	cmd: 0,
 	cmenu: 0,
+	dark: false,
+	font: Number(localGet('font')) || 100,
+	find: 0,
+	multi: 0,
+	sel: {},
 };
 
 const els = {
@@ -401,11 +396,11 @@ const colorMode = () => {
 };
 
 function checkTheme(manual){
-	opt.dark = (theme === 'mode') ? !!window.matchMedia?.("(prefers-color-scheme: dark)").matches : (theme === 'dark');
-	document.documentElement.classList.toggle("dark", opt.dark);
+	app.dark = (theme === 'mode') ? !!window.matchMedia?.("(prefers-color-scheme: dark)").matches : (theme === 'dark');
+	document.documentElement.classList.toggle("dark", app.dark);
 	if(manual){
 		if (edit.cm) {
-			edit.cm.dispatch({effects: edit.theme.reconfigure(opt.dark ? CM.darkTheme : CM.lightTheme)});
+			edit.cm.dispatch({effects: edit.theme.reconfigure(app.dark ? CM.darkTheme : CM.lightTheme)});
 		}		
 	}
 }
@@ -413,7 +408,7 @@ function checkTheme(manual){
 function wordWrap(css){
 	if(css!==1){
 		opt.wrap = (opt.wrap)? null : 1;
-		localSet("wrap",opt.wrap);
+		MyConfig(opt);
 		edit.cm.dispatch({effects: edit.wrap.reconfigure(opt.wrap ? CM.EditorView.lineWrapping : [])});
 	}
 	_id('wrapButton').classList.toggle("primary", !!opt.wrap);
@@ -422,7 +417,7 @@ function wordWrap(css){
 function spaces(css){
 	if(css!==1){
 		opt.space = (opt.space)? null : 1;
-		localSet("space",opt.space);
+		MyConfig(opt);
 		edit.cm.dispatch({effects: edit.space.reconfigure(opt.space ? CM.highlightWhitespace() : [])});
 	}
 	_id('spaceButton').classList.toggle("primary", !!opt.space);
@@ -472,21 +467,21 @@ async function validate(){
 function autoComp(css){
 	if(css!==1){
 		opt.bulb = (opt.bulb)? null : 1;
-		localSet("bulb",opt.bulb);
+		MyConfig(opt);
 	}
 	_id('bulbButton').classList.toggle("primary", !!opt.bulb);
 }
 
 function txtSize(e=0){
 	if(e){
-		opt.font += e;
-		localSet('font', opt.font);
-		toast(opt.font+'%',{timeout: 0.3,theme:'black'});
+		app.font += e;
+		localSet('font', app.font);
+		toast(app.font+'%',{timeout: 0.3,theme:'black'});
 	}
 	edit.cm.dispatch({effects: edit.font.reconfigure(txtSizeGo())});
 }
 
-const txtSizeGo = ()=>CM.EditorView.theme({'&': {fontSize: opt.font + '%'}});
+const txtSizeGo = ()=>CM.EditorView.theme({'&': {fontSize: app.font + '%'}});
 
 async function authHeaders(extra) {
 	const headers = extra || {};
@@ -544,8 +539,6 @@ async function apiPost(act, body) {
 	}
 	
 	return await apiMsg(res);
-	
-	
 }
 
 function fixpath(p) {
@@ -633,7 +626,7 @@ function switchToTab(tabId) {
 
 		edit.cm.dispatch({
 			effects: [
-				edit.theme.reconfigure(opt.dark ? CM.darkTheme : CM.lightTheme),
+				edit.theme.reconfigure(app.dark ? CM.darkTheme : CM.lightTheme),
 				edit.wrap.reconfigure(opt.wrap ? CM.EditorView.lineWrapping : []),
 				edit.space.reconfigure(opt.space ? CM.highlightWhitespace() : []),
 				edit.font.reconfigure(txtSizeGo()),
@@ -746,7 +739,7 @@ async function openTextFile(e) {
 			CM.search(),
 			CM.autocompletion(),
 			CM.EditorState.languageData.of(() => [{autocomplete: entityCompletion}]),
-			edit.theme.of(opt.dark ? CM.darkTheme : CM.lightTheme),
+			edit.theme.of(app.dark ? CM.darkTheme : CM.lightTheme),
 			edit.lang.of(edit.ext[fileExt] ? edit.ext[fileExt]() : []),
 			edit.wrap.of(opt.wrap ? CM.EditorView.lineWrapping : []),
 			edit.space.of(opt.space ? CM.highlightWhitespace() : []),
@@ -783,7 +776,7 @@ async function openTextFile(e) {
 	if(s){edit.cm.scrollDOM.scrollTo(s.left, s.top);}
 	
 	sidebar(0);
-	opt.find = 0;
+	app.find = 0;
 	
 	buildTabs();
 }
@@ -815,7 +808,7 @@ async function saveTextFile() {
 async function loadDir(path) {
 	switchToTab('files');
 	const t = fixpath(path.replace(/^\.+|\.+$/g, ""));
-	opt.sel = {};
+	app.sel = {};
 	hideMenu();
 	const data = await getDir(t);
 	app.curDir = fixpath(t);
@@ -880,7 +873,7 @@ function buildList() {
 					if(app.cmenu){return hideMenu();}
 					loadDir(getparent(app.curDir));
 				} }, [
-				(opt.multi ? _ce("td", 0, 0) : null ),
+				(app.multi ? _ce("td", 0, 0) : null ),
 				_ce("td", 0, 0,[
 					_ce('i',{class:'ico-folder'}),
 					_ce('strong', 0, {textContent: ".."})
@@ -893,10 +886,10 @@ function buildList() {
 	let ticked = 0; let tot = 0;
 	for (const e of sorted) {
 		const dt = new Date(e.mtime).toLocaleString('en-GB', { hour12: false });
-		if(opt.sel[e.path]){ticked++;}
+		if(app.sel[e.path]){ticked++;}
 		tot++;
 		let x = (e.type === "dir" || isText(e))? 'c' : 'n';
-		const row = _ce("tr", {"data-sel": (opt.sel[e.path]? '1': '0'), class: x}, {
+		const row = _ce("tr", {"data-sel": (app.sel[e.path]? '1': '0'), class: x}, {
 			onclick: () => {
 				if(app.cmenu){return hideMenu();}
 				if (e.type === "dir") {
@@ -912,14 +905,14 @@ function buildList() {
 				showContextMenu(q.clientX, q.clientY, e, row);
 			}
 			}, [
-			(opt.multi ? _ce("td", {class:"tick"}, { onclick: (q) => {
+			(app.multi ? _ce("td", {class:"tick"}, { onclick: (q) => {
 				q.stopPropagation();
 				let d='1'; const p = q.target.parentNode;
-				if(opt.sel[e.path]){
+				if(app.sel[e.path]){
 					d='0';
-					delete opt.sel[e.path];
+					delete app.sel[e.path];
 				}else{
-					opt.sel[e.path]=e;
+					app.sel[e.path]=e;
 				}
 				_att(p,'data-sel',d);
 			} }) : null ),
@@ -938,10 +931,10 @@ function buildList() {
 	const table = _ce("table", {class: 'exp'}, 0, [
 		_ce("thead", 0, 0, [
 			_ce("tr", {"data-sel": (ticked<tot? '0': '1')}, 0, [
-				((opt.multi) ? _ce("th", {class:"tick"}, { onclick: () => {
+				((app.multi) ? _ce("th", {class:"tick"}, { onclick: () => {
 					const add = ticked<tot;
 					for (const entry of sorted) {
-						if(add){opt.sel[entry.path]=entry;ticked++;}else{delete opt.sel[entry.path];ticked--;}
+						if(add){app.sel[entry.path]=entry;ticked++;}else{delete app.sel[entry.path];ticked--;}
 					}
 					buildList();
 				} }) : null ),
@@ -1144,7 +1137,7 @@ async function renameEntry(e) {
 
 
 async function deleteEntry(entry) {
-	let p = Object.keys(opt.sel);
+	let p = Object.keys(app.sel);
 	let i = p.length + " items";
 	
 	if (!p.length) {
@@ -1223,7 +1216,7 @@ async function createLink(entry, blank) {
 
 async function createZip(entry) {
 	hideMenu();
-	let p = Object.keys(opt.sel);
+	let p = Object.keys(app.sel);
 	let i = p.length + " items";
 	if(!p.length){
 		if (!entry) return;
@@ -1405,7 +1398,7 @@ async function getDir(fullpath) {
 
 
 async function targetPick(entry, isCopy = false) {
-	let p = Object.keys(opt.sel);
+	let p = Object.keys(app.sel);
 	let i = p.length + " items";
 	if (!p.length) {
 		if (!entry) return;
@@ -1564,7 +1557,7 @@ function showContextMenu(x, y, e, row) {
 	if (row) row.classList.add("rclick");
 	
 	const m = [];
-	const sels = Object.keys(opt.sel);
+	const sels = Object.keys(app.sel);
 	if(sels.length){
 		m.push(
 			['x', sels.length + ' Items', 'ico-menu ok'],
@@ -1646,21 +1639,16 @@ function showError(err) {
 
 
 
-function loadFavs() {
-	const f = localGet("favs");
-	if (f){opt.favs = JSON.parse(f);}else{opt.favs = {};}
-}
-function saveFavs() {
-	localSet("favs", JSON.stringify(opt.favs));
-}
+
+
 function addFav(e) {
 	opt.favs[e.path] = {...e};
-	saveFavs();
+	MyConfig(opt);
 	favList(0);
 }
 function removeFav(e) {
 	delete opt.favs[e.path];
-	saveFavs();
+	MyConfig(opt);
 	favList(0);
 }
 
@@ -2017,6 +2005,17 @@ async function uploadui(hide){
 	u.appendChild(h);
 }
 
+async function MyConfig(save){
+	const load = save ? 0 : 1
+	save = save ? save : {}
+	const d = await apiPost("config", save);
+	if(d.opt){
+		if(load){opt = d.opt;}
+	}else{
+		toast('Error Updating Config',{theme:'red'});
+	}
+}
+
 async function init() {
 	app.token = await getToken();
 	if (!app.token) {
@@ -2024,12 +2023,14 @@ async function init() {
 		return;
 	}
 	await getEntities();
+	await MyConfig();
+
 	checkTheme(0);
 	[
 		_ce('div',{class:'group', id: 'toolbar_files'},0,[
 			_ce('button',{title:'Refresh', class: 'ico-refresh'},{onclick: () => {loadDir(app.curDir);}}),
 			_ce('button',{title:'Select', class: 'ico-tickbox'},{onclick:(e)=>{
-				e.target.classList.toggle('primary',(opt.multi = !opt.multi));
+				e.target.classList.toggle('primary',(app.multi = !app.multi));
 				buildList();
 			}}),
 			_ce('button',{title:'Upload', class: 'ico-upload'},{onclick: ()=>{uploadui();}}),
@@ -2051,8 +2052,8 @@ async function init() {
 			_ce('button',{title: "Undo", class:"ico-undo"}, {onclick: ()=>{CM.undo(edit.cm);}}),
 			_ce('button',{title: "Redo", class:"ico-redo"}, {onclick: ()=>{CM.redo(edit.cm);}}),
 			_ce('button',{title: "Find in file", class:"ico-search"}, {onclick: ()=>{
-				opt.find = !opt.find;
-				if(opt.find){
+				app.find = !app.find;
+				if(app.find){
 					CM.openSearchPanel(edit.cm);
 				}else{
 					CM.closeSearchPanel(edit.cm);
@@ -2111,7 +2112,6 @@ async function init() {
 		dirContext(e.clientX, e.clientY);
 	});
 	
-	loadFavs();
 	favList(0);
 	buildTabs();
 	loadDir("/");
