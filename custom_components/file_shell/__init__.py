@@ -28,11 +28,13 @@ from homeassistant.components.http import HomeAssistantView, StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.storage import Store
 import voluptuous as vol
 
 NAME = "File Shell"
 DOMAIN = "file_shell"
 DOMAIN_REG = "file_shell_reg"
+DOMAIN_OPT = "file_shell.json"
 CONF_BASE_DIR = "base_dir"
 
 _LOGGER = logging.getLogger(__name__)
@@ -92,6 +94,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.http.register_view(FileShellStreamView(hass, entry))
     hass.http.register_view(FileShellTerminalView(hass, entry))
     entry.async_on_unload(entry.add_update_listener(async_update_options))
+    store = Store(hass, version=1, key=DOMAIN_OPT)
+    hass.data[DOMAIN_OPT] = store
     hass.data[DOMAIN_REG] = True
     return True
 
@@ -245,7 +249,6 @@ class FileShellBase:
             raise web.HTTPBadRequest(text="Invalid JSON body") from err
 
     def _get_token_from_request(self, request: web.Request) -> str | None:
-        """Extract bearer token from Authorization header or query string."""
         auth_header = request.headers.get("Authorization", "")
         if auth_header.lower().startswith("bearer "):
             return auth_header[7:].strip()
@@ -253,7 +256,6 @@ class FileShellBase:
         return request.query.get("token") or request.query.get("authorization")
 
     def _admin_user(self, request: web.Request) -> bool:
-        """Return True if request is authenticated as an active admin user."""
         token = self._get_token_from_request(request)
         if not token:
             return False
@@ -265,6 +267,18 @@ class FileShellBase:
             pass
         return False
 
+    async def _storage(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
+        default = {"wrap": True, "bulb": False, "space": False, "favs": {}, "recentmax": 10, "recentlist": []}
+        if not (store := self.hass.data.get(DOMAIN_OPT)):
+            _LOGGER.warning("Settings not initialized")
+            return default
+        data = {**default, **((await store.async_load()) or {})}
+        if isinstance(config, dict):
+            data |= config
+            await store.async_save(data)
+        return data
+        
+        
 class FileShellApiView(HomeAssistantView, FileShellBase):
     url = "/api/file_shell"
     name = "api:file_shell"
@@ -293,6 +307,7 @@ class FileShellApiView(HomeAssistantView, FileShellBase):
                 "chmod": self._chmod,
                 "symlink": self._symlink,
                 "valid": self._valid,
+                "config": self._config,
                 "copy": lambda req: self._move(req, is_copy=True),
                 "move": lambda req: self._move(req, is_copy=False),
             },
@@ -740,6 +755,10 @@ class FileShellApiView(HomeAssistantView, FileShellBase):
             return json_ok(valid=True)
         return json_ok(valid=False, **result)
 
+    async def _config(self, request: web.Request) -> web.Response:
+        data = await self.read_json(request)
+        return json_ok(opt=await self._storage(data if isinstance(data, dict) else None))
+        
 class FileShellStreamView(HomeAssistantView, FileShellBase):
     url = "/api/file_shell_stream"
     name = "api:file_shell_stream"
@@ -828,6 +847,7 @@ class FileShellStreamView(HomeAssistantView, FileShellBase):
             uploaded.append(res)
         msg = f"Uploaded: {', '.join(uploaded)}" if uploaded else "No files uploaded"
         return json_ok(msg=msg)
+
 
 class FileShellTerminalView(HomeAssistantView, FileShellBase):
     url = "/api/file_shell_terminal"
