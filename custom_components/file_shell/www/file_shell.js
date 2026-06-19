@@ -1,7 +1,7 @@
 (function () {
 "use strict";
 
-console.log("File Shell 1.0");
+console.log("File Shell 1.0.3");
 const _id = (id) => document.getElementById(id);
 const _qsa = (q, el) => Array.from((el || document).querySelectorAll(q));
 const _qs = (q, el) => (el || document).querySelector(q);
@@ -54,7 +54,6 @@ const localTag = 'file_shell';
 const localGet = (e) => localStorage.getItem(localTag+e);
 const localSet = (k, v) => v == null ? localStorage.removeItem(localTag + k) : localStorage.setItem(localTag + k, v);
 
-const getExt = (t)=>{const o=t.split("/").pop().split(".");return o.length>1?o.pop().toLowerCase():"";};
 
 const opt = {
 	multi: 0,
@@ -302,10 +301,12 @@ function popup(html='', head='Message', options={}){
 	
 }
 
-const isText = (e) => e.type !== "dir" && "txt.md.yaml.yml.jinja.json.xml.csv.log.ini.conf.cfg.py.js.ts.php.htm.html.css.sh".split('.').some(ext => getExt(e.name).endsWith('.' + ext));
+const getExt = (t)=>{const o=t.split("/").pop().split(".");return o.length>1?o.pop().toLowerCase():"";};
+const ext_zip = new Set(["zip", "tar", "gz", "tgz"]);
+const ext_text = new Set(["txt", "md", "yaml", "yml", "jinja", "json", "xml", "csv", "log", "ini", "conf", "cfg", "py", "js", "ts", "php", "htm", "html", "css", "sh"]);
+const isText = (e) => e.type !== "dir" && ext_text.has(getExt(e.name));
+const isZipFile = (e) => e.type !== "dir" && ext_zip.has(getExt(e.name));
 const iconFor = (e) => e.type === "dir" ? "folder" : isZipFile(e) ? "zip" : isText(e) ? "doc" : "file";
-
-const isZipFile = (e) => e?.type === "file" && [".zip", ".tar", ".gz", ".tgz"].some(ext => getExt(e.name).endsWith(ext));
 
 const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' })[c]);
 
@@ -456,13 +457,13 @@ async function validate(){
 	}else if(['yaml','yml','py'].includes(ext)){
 		r = await apiPost("valid", { ext, content: c});
 		if (r.valid) { r = ''; }else{
-			r = `${r.error}, line ${r.line}, column ${r.column}`;
+			r = escapeHtml(r.error)+'<p>line '+ r.line+', column '+r.column+'</p>';
 		}
 	}else{
 		r = 'Unsupported file: '+ext;
 	}
 	if (r) {
-		toast('Error: '+r, { theme: 'red', timeout: 15 });
+		toast('Error: '+r, { theme: 'red', timeout: 0, close: 1 });
 	}else{
 		toast("No Errors");
 	}
