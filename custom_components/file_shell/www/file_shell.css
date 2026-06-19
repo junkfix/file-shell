@@ -114,23 +114,6 @@ body {
 	overflow: hidden;
 }
 
-nav {
-	display: flex;
-	align-items: center;
-	gap: 12px;
-	padding: 0 8px;
-	background: var(--panel);
-}
-
-nav button,
-#files button{
-	background-color: var(--panel2);
-	color: var(--text);
-	border: 1px solid var(--border);
-	border-radius: 6px;
-	padding: 2px 8px;
-	cursor: pointer;
-}
 
 button:hover{
 	border-color: var(--accent);
