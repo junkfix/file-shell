@@ -56,11 +56,13 @@ class FileShellConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """YAML import."""
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
+        
+        base_dir = str((user_input or {}).get(CONF_BASE_DIR) or "").strip()
 
         return self.async_create_entry(
             title="File Shell",
             data={
-                CONF_BASE_DIR: "",
+                CONF_BASE_DIR: base_dir,
             },
         )
 
