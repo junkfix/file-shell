@@ -48,6 +48,13 @@ try:
 except ImportError:
     PTY = False
 
+class MyYAML(yaml.SafeLoader):
+    pass
+
+
+for _tag in ('!secret', '!env_var', '!extend', '!input', '!include', '!include_dir_list', '!include_dir_named', '!include_dir_merge_list', '!include_dir_merge_named', '!lambda'):
+    MyYAML.add_constructor(_tag, lambda loader, node: loader.construct_scalar(node))
+    
 def json_error(message: str, status: int = 400) -> web.Response:
     return web.json_response({"ok": False, "error": message}, status=status)
 
@@ -63,7 +70,7 @@ async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
             hass.config_entries.flow.async_init(
                 DOMAIN,
                 context={"source": config_entries.SOURCE_IMPORT},
-                data={},
+                data=config[DOMAIN],
             )
         )
     return True
@@ -256,17 +263,18 @@ class FileShellBase:
         return request.query.get("token") or request.query.get("authorization")
 
     def _admin_user(self, request: web.Request) -> bool:
-        token = self._get_token_from_request(request)
-        if not token:
-            return False
-        try:
-            refresh_token = self.hass.auth.async_validate_access_token(token)
-            if refresh_token and refresh_token.user and refresh_token.user.is_active:
-                return refresh_token.user.is_admin   # <-- admin check
-        except Exception:
-            pass
-        return False
-
+        user = request.get("hass_user")
+        if user is None:
+            token = self._get_token_from_request(request)
+            if not token:
+                return False
+            try:
+                refresh_token = self.hass.auth.async_validate_access_token(token)
+                user = refresh_token.user if refresh_token else None
+            except Exception:
+                return False
+        return bool(user and user.is_active and user.is_admin)
+        
     async def _storage(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
         default = {"wrap": True, "bulb": False, "space": False, "favs": {}, "recentmax": 10, "recentlist": []}
         if not (store := self.hass.data.get(DOMAIN_OPT)):
@@ -730,9 +738,6 @@ class FileShellApiView(HomeAssistantView, FileShellBase):
 
         def validate():
             if fileext in ("yaml", "yml"):
-                class MyYAML(yaml.SafeLoader): pass
-                def tagger(r, n): return r.construct_scalar(n)
-                for tag in ['!secret', '!env_var', '!extend', '!input','!include', '!include_dir_list', '!include_dir_named','!include_dir_merge_list', '!include_dir_merge_named', '!lambda' ]: MyYAML.add_constructor(tag, tagger)
                 try:
                     yaml.load(content, Loader=MyYAML)
                     return None
@@ -854,12 +859,25 @@ class FileShellTerminalView(HomeAssistantView, FileShellBase):
     name = "api:file_shell_terminal"
     requires_auth = False
 
+    def _terminal_cwd(self, request: web.Request) -> Path:
+        raw = request.query.get("cwd")
+        if raw:
+            try:
+                resolved = self.safe_path(raw)
+                if resolved.is_dir():
+                    return resolved
+            except web.HTTPException:
+                pass
+        return self.base_dir
+
     async def get(self, request: web.Request) -> web.WebSocketResponse:
         if not self._admin_user(request):
             raise web.HTTPUnauthorized(text="Admin privileges required")
 
         if not PTY:
             raise web.HTTPInternalServerError(text="PTY not supported on this system")
+
+        cwd = self._terminal_cwd(request)
 
         ws = web.WebSocketResponse(heartbeat=30)
         await ws.prepare(request)
@@ -916,7 +934,7 @@ class FileShellTerminalView(HomeAssistantView, FileShellBase):
                 stdin=slave_fd,
                 stdout=slave_fd,
                 stderr=slave_fd,
-                cwd=os.environ.get("HOME", "/"),
+                cwd=str(cwd),
                 start_new_session=True,
                 close_fds=True,
                 env=env,
