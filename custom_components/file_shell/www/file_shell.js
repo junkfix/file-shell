@@ -1,7 +1,7 @@
 (function () {
 "use strict";
 
-console.log("File Shell 1.0.4");
+console.log("File Shell 1.2.0");
 const _id = (id) => document.getElementById(id);
 const _qsa = (q, el) => Array.from((el || document).querySelectorAll(q));
 const _qs = (q, el) => (el || document).querySelector(q);
@@ -66,12 +66,12 @@ const app = {
 	cache: new Map(),
 	sortBy: 'name',
 	sortOrder: 'asc',
-	term: null,
+	terms: {},
+	termSeq: 0,
 	sidebar: 1,
 	files: 1,
 	favs: 1,
 	uploads: 0,
-	cmd: 0,
 	cmenu: 0,
 	dark: false,
 	font: Number(localGet('font')) || 100,
@@ -92,11 +92,16 @@ const els = {
 };
 
 const tabs = {
-	fixed: ['favs', 'files', 'cmd', 'uploads'],
+	fixed: ['favs', 'files', 'uploads'],
 	list: [],
+	terms: [],
 	open: 'files',
 	x: {},
 };
+
+const TERM_PREFIX = 'cmd:';
+const isTermTab = (id) => typeof id === 'string' && id.startsWith(TERM_PREFIX);
+const termTitle = (cwd) => (cwd || '/').split('/').filter(Boolean).pop() || 'Terminal';
 
 const edit = {
 	cm: null,
@@ -124,7 +129,8 @@ function toast(message, opts = {}){
 		theme: 'green',
 		close: 0,
 		prep: 0,
-		click: null
+		click: null,
+		html: false
 	}, opts);
 	
 	const dismiss = () => {
@@ -134,7 +140,7 @@ function toast(message, opts = {}){
 		}
 	};
 	
-	const el = _ce('div',{'class': 'toast ' + opts.theme},{innerHTML: '<p>' + message + '</p>'});
+	const el = _ce('div',{'class': 'toast ' + opts.theme},{innerHTML: '<p>' + (opts.html ? message : escapeHtml(message)) + '</p>'});
 	if(typeof opts.click === 'function'){
 		el.onclick = (e) => {
 			if(opts.click(e) !== false){dismiss();}
@@ -251,7 +257,7 @@ function popup(html='', head='Message', options={}){
 	pop.appendChild(popl);
 	const pop_el = _ce('div',{id: 'popbox'});
 	
-	const hd = _ce('header',0,{innerHTML: head});
+	const hd = _ce('header',0,{textContent: head});
 	pop_el.appendChild(hd);
 	
 	pop.appendChild(pop_el);
@@ -275,7 +281,7 @@ function popup(html='', head='Message', options={}){
 		pop_el.style.top = (window.pageYOffset + Math.max(100,(window.innerHeight - pop_el.offsetHeight) / 2))+'px';
 	};
 	const pp = {
-		head: (h) => { hd.innerHTML = h;},
+		head: (h) => { hd.textContent = h;},
 		msg: (msg) => { section.innerHTML = msg;},
 		btn: (bx) => { options.buttons = bx; ft.innerHTML = ''; fbtn();},
 		el: pop,
@@ -458,7 +464,7 @@ async function validate(){
 		r = 'Unsupported file: '+ext;
 	}
 	if (r) {
-		toast('Error: '+r, { theme: 'red', timeout: 0, close: 1 });
+		toast('Error: '+r, { theme: 'red', timeout: 0, close: 1, html: 1 });
 	}else{
 		toast("No Errors");
 	}
@@ -572,7 +578,6 @@ function buildTabs() {
 	[
 		['favs', 'Favorites', 'ico-star'],
 		['files', d, 'ico-folder'],
-		['cmd', 'Terminal', 'ico-cmd'],
 		['uploads', 'Uploads', 'ico-upload'],
 	].forEach(([id, text, icon]) => {
 		if (!app[id]) { return; }
@@ -589,6 +594,18 @@ function buildTabs() {
 	
 
 
+	for (const id of tabs.terms) {
+		const session = app.terms[id];
+		t.appendChild(_ce('div', {title: 'Terminal: '+(session?session.cwd:'/'), class: 'tab tcmd'+ (tabs.open === id ? ' active' : '')},{onclick: () => switchToTab(id)},[
+			_ce('i',{class: 'ico-cmd'}),
+			_ce('span',0,{textContent: session?session.title:'Terminal'}),
+			_ce('span', { class: 'ico-x' }, { onclick: (e) => {
+				e.stopPropagation();
+				closeTab(id);
+			}}),
+		]));
+	}
+
 	for (const id of tabs.list) {
 		t.appendChild(_ce('div', {class: 'tab '+ (tabs.open === id ? 'active' : '')},{textContent: id.split('/').pop(), onclick: () => switchToTab(id)},
 			_ce('span', { class: 'ico-x' }, { onclick: (e) => {
@@ -601,18 +618,26 @@ function buildTabs() {
 
 function switchToTab(tabId) {
 	if (tabId === tabs.open) return;
-	if (tabs.open && !tabs.fixed.includes(tabs.open)) {
+	if (tabs.open && !tabs.fixed.includes(tabs.open) && !isTermTab(tabs.open)) {
 		tabs.x[tabs.open].cm = edit.cm.state;
 		const r = edit.cm.scrollDOM;
 		tabs.x[tabs.open].scr = { top: r.scrollTop, left: r.scrollLeft };
 	}
-	if (tabId === 'cmd') {
-		if (!app.term) terminal();
+	if (isTermTab(tabs.open) && app.terms[tabs.open]) {
+		app.terms[tabs.open].pane.style.display = 'none';
 	}	
 	tabs.open = tabId;
 	
-	_qs('body').classList.remove('edit', ...tabs.fixed);
-	if (tabs.fixed.includes(tabId)) {
+	_qs('body').classList.remove('edit', 'cmd', ...tabs.fixed);
+	if (isTermTab(tabId)) {
+		_qs('body').classList.add('cmd');
+		const session = app.terms[tabId];
+		if (session) {
+			session.pane.style.display = 'flex';
+			session.fit.fit();
+			session.term.focus();
+		}
+	} else if (tabs.fixed.includes(tabId)) {
 		_qs('body').classList.add(tabId);
 	} else {
 		edit.cm.setState(tabs.x[tabId].cm);
@@ -620,7 +645,7 @@ function switchToTab(tabId) {
 		const s = tabs.x[tabId].scr;
 		if (s) edit.cm.scrollDOM.scrollTo(s.left, s.top);
 		
-		const e = tabs.x[tabs.open].lang;
+		const e = tabs.x[tabId].lang;
 		_qs('#CMLang select').value = e;
 		extLang(e);
 
@@ -650,10 +675,15 @@ async function closeTab(id, force=0) {
 		buildTabs();
 		return;
 	}
-	if (id === 'cmd') {
-		terminal(1);
+	if (isTermTab(id)) {
+		app.terms[id]?.wipe();
+		const idx = tabs.terms.indexOf(id);
+		if (idx !== -1) tabs.terms.splice(idx, 1);
+		if (tabs.open === id) {
+			tabs.open = null;
+			switchToTab(tabs.terms[Math.max(0, idx - 1)] || 'files');
+		}
 		buildTabs();
-		switchToTab('files');
 		return;
 	}	
 	const t = tabs.x[id];
@@ -769,7 +799,7 @@ async function openTextFile(e) {
 	tabs.open = path;
 	extLang('auto');
 	
-	_qs('body').classList.remove(...tabs.fixed);
+	_qs('body').classList.remove('cmd', ...tabs.fixed);
 	_qs('body').classList.add('edit');
 		
 	const s = tabs.x[path].scr;
@@ -784,7 +814,7 @@ async function openTextFile(e) {
 
 
 async function saveTextFile() {
-	if (tabs.fixed.includes(tabs.open) || !edit.cm) return;
+	if (tabs.fixed.includes(tabs.open) || isTermTab(tabs.open) || !edit.cm) return;
 	const p = tabs.open;
 	if (!p) return;
 	const c = edit.cm.state.doc.toString();
@@ -1695,21 +1725,22 @@ function favList(swt) {
 }
 
 
-function terminal(hide) {
-	if (hide){
-		if(app.term) {
-			app.term.wipe();
-		}
-		app.cmd = 0;
-		return;
-	}
+function terminal(cwd) {
 	sidebar(0);
-	if (window.Terminal) return _term();
-	document.body.appendChild(_ce('script',0,{src: './xterm.js'+location.search, onload: _term}));
+	const open = () => {
+		const id = TERM_PREFIX + (++app.termSeq);
+		app.terms[id] = { title: termTitle(cwd), cwd: cwd || '/' };
+		tabs.terms.push(id);
+		_term(id, cwd);
+		switchToTab(id);
+	};
+	if (window.Terminal) { open(); return; }
+	document.body.appendChild(_ce('script',0,{src: './xterm.js'+location.search, onload: open}));
 }
-async function _term(){
-	els.term.innerHTML = '';
-	if(!app.cmd){app.cmd = 1;buildTabs();}
+function _term(id, cwd){
+	const pane = _ce('div', {class: 'term-pane', style: 'display:none;height:100%;flex-direction:column;'});
+	els.term.appendChild(pane);
+
 	const term = new Terminal({ cursorBlink: true });
 	const fit = new FitAddon();
 	const encoder = new TextEncoder();
@@ -1720,12 +1751,11 @@ async function _term(){
 	let msg = 0;
 	
 	term.loadAddon(fit);
-	term.open(els.term);
-	fit.fit();
+	term.open(pane);
 	const r_fit = new ResizeObserver(() => fit.fit());
-	r_fit.observe(els.term);
-	_on(window, 'resize', _=> fit.fit());
-	term.focus();
+	r_fit.observe(pane);
+	const onWinResize = () => fit.fit();
+	_on(window, 'resize', onWinResize);
 
 	const status = (t) => {
 		term.write((msg ? '\r\x1b[2K' : '\r\n') + t);
@@ -1759,8 +1789,8 @@ async function _term(){
 		status('\x1b[36mConnecting... \x1b[0m');
 		try {
 			const token = await getToken();
-			ws = new WebSocket(location.protocol.replace('http','ws') + '//'+location.host+'/api/file_shell_terminal?token='+token);
-			app.term.ws = ws;
+			const q = '?token='+encodeURIComponent(token)+(cwd ? '&cwd='+encodeURIComponent(cwd) : '');
+			ws = new WebSocket(location.protocol.replace('http','ws') + '//'+location.host+'/api/file_shell_terminal'+q);
 			ws.binaryType = 'arraybuffer';
 			ws.onopen = () => {
 				term.write('\x1b[32mConnected\r\n\x1b[0m');
@@ -1789,15 +1819,16 @@ async function _term(){
 		try { t_data.dispose(); } catch (_) {}
 		try { t_rsz.dispose(); } catch (_) {}
 		try { r_fit.disconnect(); } catch (_) {}
-		ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
+		_off(window, 'resize', onWinResize);
 		if (ws) {
 			ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
 			try { ws.close(); } catch (_) {}
 		}
 		try { term.dispose(); } catch (_) {}
-		app.term = null;
+		try { pane.remove(); } catch (_) {}
+		delete app.terms[id];
 	};
-	app.term = { term, ws, wipe };
+	app.terms[id] = { ...app.terms[id], term, fit, pane, wipe };
 	connect();
 }
 
@@ -2036,7 +2067,7 @@ async function init() {
 			_ce('button',{title:'Upload', class: 'ico-upload'},{onclick: ()=>{uploadui();}}),
 			_ce('button',{title:'New File', class: 'ico-newfile'},{onclick: ()=>{createNewFile();}}),
 			_ce('button',{title:'New Folder', class: 'ico-newdir'},{onclick: ()=>{createFolder();}}),
-			_ce('button', { title: 'Terminal', class: 'ico-cmd' }, {onclick: _ => switchToTab('cmd')}),
+			_ce('button', { title: 'Terminal', class: 'ico-cmd' }, {onclick: () => terminal(app.curDir)}),
 		]),
 		_ce('div',{class:'group', id: 'toolbar_edit'},0,[
 			_ce('button',{title: "Save", class:"ico-save"}, {onclick: ()=>{saveTextFile();}}),
@@ -2082,7 +2113,7 @@ async function init() {
 	_qs('#sidebar .toolbar').appendChild(
 		_ce('div',{class:'group',style: "flex:1"},0,[
 			_ce('button',{title:'Upload', class: 'ico-upload'},{onclick: ()=>{uploadui();}}),
-			_ce('button', { title: 'Terminal', class: 'ico-cmd' }, {onclick: _ => switchToTab('cmd')}),
+			_ce('button', { title: 'Terminal', class: 'ico-cmd' }, {onclick: () => terminal(app.curDir)}),
 			_ce('button',{title:'Color Mode', class: 'ico-'+theme, id: 'theme'},{onclick: colorMode}),
 			_ce('span',{style: "flex:1"}),
 			_ce('button',{title:'Close', class: 'ico-x'},{onclick: _=>{sidebar(0);}}),
