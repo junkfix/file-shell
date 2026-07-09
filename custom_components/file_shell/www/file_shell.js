@@ -1,7 +1,7 @@
 (function () {
 "use strict";
 
-console.log("File Shell 1.2.0");
+console.log("File Shell 1.2.1");
 const _id = (id) => document.getElementById(id);
 const _qsa = (q, el) => Array.from((el || document).querySelectorAll(q));
 const _qs = (q, el) => (el || document).querySelector(q);
@@ -725,7 +725,6 @@ function Draft(path, d=false) {
 	}
 	return localSet(k, d);
 }
-
 async function openTextFile(e) {
 	const path = fixpath(e.path);
 	hideMenu();
@@ -760,13 +759,17 @@ async function openTextFile(e) {
 	
 
 	const fileExt = getExt(path);
+	const goToLine=v=>{let l=+prompt("Go to Line:");return l>0&&l<=v.state.doc.lines?(v.dispatch({selection:{anchor:v.state.doc.line(l).from},userEvent:"select"}),1):0};
 
 	tabs.x[path].cm = CM.EditorState.create({
 		doc: text,
 		extensions: [
 			CM.basicSetup,
 			CM.keymap.of([CM.indentWithTab]),
-			CM.search(),
+			CM.Prec.high(CM.keymap.of([
+				{key: "Ctrl-g", run: goToLine, preventDefault: true},
+				{key: "Cmd-g", run: goToLine, preventDefault: true},
+			])),
 			CM.autocompletion(),
 			CM.EditorState.languageData.of(() => [{autocomplete: entityCompletion}]),
 			edit.theme.of(app.dark ? CM.darkTheme : CM.lightTheme),
